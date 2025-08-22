@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IVEE Export to XLS</title>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #f4f4f4;
+    }
+    button {
+      padding: 12px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <button onclick="exportToExcel()">Download XLS</button>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+    // TODO: Replace with your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBckBp4RW0kWY6WMHJZ-ML0hCT18jTxLuk",
+      authDomain: "ivee-a3512.firebaseapp.com",
+      projectId: "ivee-a3512",
+      storageBucket: "ivee-a3512.firebasestorage.app",
+      messagingSenderId: "843533343549",
+      appId: "1:843533343549:web:945fe63f0cdb5c8638c354"
+      measurementId: "G-2PE3N7SQLK"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function exportToExcel() {
+      const studentsSnap = await getDocs(collection(db, "students"));
+      const attendanceSnap = await getDocs(collection(db, "attendanceLog"));
+      const collectionSnap = await getDocs(collection(db, "collectionLog"));
+      const documentSnap = await getDocs(collection(db, "documentLog"));
+
+      // Gather unique headers
+      let attendanceEvents = [...new Set(attendanceSnap.docs.map(d => d.data().eventName))];
+      let collectionPurposes = [...new Set(collectionSnap.docs.map(d => d.data().purpose))];
+      let documentTypes = [...new Set(documentSnap.docs.map(d => d.data().documentType))];
+
+      // Header row
+      let headers = ["Name", "ID", ...attendanceEvents, ...collectionPurposes, ...documentTypes];
+      let rows = [headers];
+
+      for (let studentDoc of studentsSnap.docs) {
+        let student = studentDoc.data();
+        let row = [student.studentName, student.idNumber];
+
+        // Attendance ✔
+        for (let event of attendanceEvents) {
+          let hasAttendance = attendanceSnap.docs.some(
+            d => d.data().studentID === student.idNumber && d.data().eventName === event
+          );
+          row.push(hasAttendance ? "✔" : "");
+        }
+
+        // Collections (amount)
+        for (let purpose of collectionPurposes) {
+          let collectionEntry = collectionSnap.docs.find(
+            d => d.data().studentID === student.idNumber && d.data().purpose === purpose
+          );
+          row.push(collectionEntry ? (collectionEntry.data().amount || "1") : "");
+        }
+
+        // Documents ✔
+        for (let docType of documentTypes) {
+          let hasDoc = documentSnap.docs.some(
+            d => d.data().studentID === student.idNumber && d.data().documentType === docType
+          );
+          row.push(hasDoc ? "✔" : "");
+        }
+
+        rows.push(row);
+      }
+
+      // Convert to sheet
+      let worksheet = XLSX.utils.aoa_to_sheet(rows);
+      let workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Student Logs");
+
+      // Download
+      XLSX.writeFile(workbook, "student_logs.xls");
+    }
+  </script>
+</body>
+</html>
