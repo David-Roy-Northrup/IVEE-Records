@@ -7,7 +7,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xls;
 
 // Initialize Firestore
 $firestore = new FirestoreClient([
-    'projectId' => 'YOUR_PROJECT_ID'
+    'projectId' => 'ivee-a3512'
 ]);
 
 // Get students
