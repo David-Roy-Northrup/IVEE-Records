@@ -35,14 +35,16 @@
       border: 1px solid #ccc;
       border-radius: 5px;
       width: 80%;
+      max-height: 200px;
+      overflow-y: auto;
       font-size: 14px;
       color: #333;
-      white-space: pre-line; /* keeps line breaks */
+      white-space: pre-line;
     }
   </style>
 </head>
 <body>
-  <button onclick="exportToExcel()">Download XLS</button>
+  <button id="downloadBtn">Download XLS</button>
 
   <!-- Debug output -->
   <p id="debug">Debug messages will appear here...</p>
@@ -51,12 +53,12 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
     import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-    // Firebase config (replace with your project details)
+    // ✅ Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyBckBp4RW0kWY6WMHJZ-ML0hCT18jTxLuk",
       authDomain: "ivee-a3512.firebaseapp.com",
       projectId: "ivee-a3512",
-      storageBucket: "ivee-a3512.firebasestorage.app",
+      storageBucket: "ivee-a3512.appspot.com",
       messagingSenderId: "843533343549",
       appId: "1:843533343549:web:945fe63f0cdb5c8638c354",
       measurementId: "G-2PE3N7SQLK"
@@ -66,7 +68,9 @@
     const db = getFirestore(app);
 
     function logDebug(message) {
-      document.getElementById("debug").innerText += "\n" + message;
+      const debugEl = document.getElementById("debug");
+      debugEl.innerText += "\n" + message;
+      debugEl.scrollTop = debugEl.scrollHeight;
     }
 
     async function exportToExcel() {
@@ -87,7 +91,7 @@
         let collectionPurposes = [...new Set(collectionSnap.docs.map(d => d.data().purpose))];
         let documentTypes = [...new Set(documentSnap.docs.map(d => d.data().documentType))];
 
-        logDebug("Headers prepared: " + [...attendanceEvents, ...collectionPurposes, ...documentTypes].join(", "));
+        logDebug("Headers: " + [...attendanceEvents, ...collectionPurposes, ...documentTypes].join(", "));
 
         let headers = ["Name", "ID", ...attendanceEvents, ...collectionPurposes, ...documentTypes];
         let rows = [headers];
@@ -123,7 +127,7 @@
           rows.push(row);
         }
 
-        logDebug("Rows prepared: " + (rows.length - 1) + " students");
+        logDebug("Rows ready: " + (rows.length - 1) + " students");
 
         // Convert to sheet
         let worksheet = XLSX.utils.aoa_to_sheet(rows);
@@ -136,10 +140,13 @@
         logDebug("Excel file generated successfully ✅");
 
       } catch (error) {
-        logDebug("Error: " + error.message);
+        logDebug("❌ Error: " + error.message);
         console.error(error);
       }
     }
+
+    // ✅ Attach event listener instead of onclick
+    document.getElementById("downloadBtn").addEventListener("click", exportToExcel);
   </script>
 </body>
 </html>
