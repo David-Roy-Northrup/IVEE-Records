@@ -10,6 +10,7 @@
     body {
       font-family: Arial, sans-serif;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       height: 100vh;
@@ -27,82 +28,117 @@
     button:hover {
       background: #0056b3;
     }
+    #debug {
+      margin-top: 20px;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      width: 80%;
+      font-size: 14px;
+      color: #333;
+      white-space: pre-line; /* keeps line breaks */
+    }
   </style>
 </head>
 <body>
   <button onclick="exportToExcel()">Download XLS</button>
 
+  <!-- Debug output -->
+  <p id="debug">Debug messages will appear here...</p>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-    import { getFirestore, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-    // TODO: Replace with your Firebase config
+    // Firebase config (replace with your project details)
     const firebaseConfig = {
       apiKey: "AIzaSyBckBp4RW0kWY6WMHJZ-ML0hCT18jTxLuk",
       authDomain: "ivee-a3512.firebaseapp.com",
       projectId: "ivee-a3512",
       storageBucket: "ivee-a3512.firebasestorage.app",
       messagingSenderId: "843533343549",
-      appId: "1:843533343549:web:945fe63f0cdb5c8638c354"
+      appId: "1:843533343549:web:945fe63f0cdb5c8638c354",
       measurementId: "G-2PE3N7SQLK"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    function logDebug(message) {
+      document.getElementById("debug").innerText += "\n" + message;
+    }
+
     async function exportToExcel() {
-      const studentsSnap = await getDocs(collection(db, "students"));
-      const attendanceSnap = await getDocs(collection(db, "attendanceLog"));
-      const collectionSnap = await getDocs(collection(db, "collectionLog"));
-      const documentSnap = await getDocs(collection(db, "documentLog"));
+      try {
+        logDebug("Fetching data from Firestore...");
 
-      // Gather unique headers
-      let attendanceEvents = [...new Set(attendanceSnap.docs.map(d => d.data().eventName))];
-      let collectionPurposes = [...new Set(collectionSnap.docs.map(d => d.data().purpose))];
-      let documentTypes = [...new Set(documentSnap.docs.map(d => d.data().documentType))];
+        const studentsSnap = await getDocs(collection(db, "students"));
+        const attendanceSnap = await getDocs(collection(db, "attendanceLog"));
+        const collectionSnap = await getDocs(collection(db, "collectionLog"));
+        const documentSnap = await getDocs(collection(db, "documentLog"));
 
-      // Header row
-      let headers = ["Name", "ID", ...attendanceEvents, ...collectionPurposes, ...documentTypes];
-      let rows = [headers];
+        logDebug(`Loaded ${studentsSnap.size} students`);
+        logDebug(`Loaded ${attendanceSnap.size} attendance logs`);
+        logDebug(`Loaded ${collectionSnap.size} collection logs`);
+        logDebug(`Loaded ${documentSnap.size} document logs`);
 
-      for (let studentDoc of studentsSnap.docs) {
-        let student = studentDoc.data();
-        let row = [student.studentName, student.idNumber];
+        let attendanceEvents = [...new Set(attendanceSnap.docs.map(d => d.data().eventName))];
+        let collectionPurposes = [...new Set(collectionSnap.docs.map(d => d.data().purpose))];
+        let documentTypes = [...new Set(documentSnap.docs.map(d => d.data().documentType))];
 
-        // Attendance ✔
-        for (let event of attendanceEvents) {
-          let hasAttendance = attendanceSnap.docs.some(
-            d => d.data().studentID === student.idNumber && d.data().eventName === event
-          );
-          row.push(hasAttendance ? "✔" : "");
+        logDebug("Headers prepared: " + [...attendanceEvents, ...collectionPurposes, ...documentTypes].join(", "));
+
+        let headers = ["Name", "ID", ...attendanceEvents, ...collectionPurposes, ...documentTypes];
+        let rows = [headers];
+
+        for (let studentDoc of studentsSnap.docs) {
+          let student = studentDoc.data();
+          let row = [student.studentName, student.idNumber];
+
+          // Attendance ✔
+          for (let event of attendanceEvents) {
+            let hasAttendance = attendanceSnap.docs.some(
+              d => d.data().studentID === student.idNumber && d.data().eventName === event
+            );
+            row.push(hasAttendance ? "✔" : "");
+          }
+
+          // Collections (amount)
+          for (let purpose of collectionPurposes) {
+            let collectionEntry = collectionSnap.docs.find(
+              d => d.data().studentID === student.idNumber && d.data().purpose === purpose
+            );
+            row.push(collectionEntry ? (collectionEntry.data().amount || "1") : "");
+          }
+
+          // Documents ✔
+          for (let docType of documentTypes) {
+            let hasDoc = documentSnap.docs.some(
+              d => d.data().studentID === student.idNumber && d.data().documentType === docType
+            );
+            row.push(hasDoc ? "✔" : "");
+          }
+
+          rows.push(row);
         }
 
-        // Collections (amount)
-        for (let purpose of collectionPurposes) {
-          let collectionEntry = collectionSnap.docs.find(
-            d => d.data().studentID === student.idNumber && d.data().purpose === purpose
-          );
-          row.push(collectionEntry ? (collectionEntry.data().amount || "1") : "");
-        }
+        logDebug("Rows prepared: " + (rows.length - 1) + " students");
 
-        // Documents ✔
-        for (let docType of documentTypes) {
-          let hasDoc = documentSnap.docs.some(
-            d => d.data().studentID === student.idNumber && d.data().documentType === docType
-          );
-          row.push(hasDoc ? "✔" : "");
-        }
+        // Convert to sheet
+        let worksheet = XLSX.utils.aoa_to_sheet(rows);
+        let workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Student Logs");
 
-        rows.push(row);
+        // Download
+        XLSX.writeFile(workbook, "student_logs.xls");
+
+        logDebug("Excel file generated successfully ✅");
+
+      } catch (error) {
+        logDebug("Error: " + error.message);
+        console.error(error);
       }
-
-      // Convert to sheet
-      let worksheet = XLSX.utils.aoa_to_sheet(rows);
-      let workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Student Logs");
-
-      // Download
-      XLSX.writeFile(workbook, "student_logs.xls");
     }
   </script>
 </body>
