@@ -1,152 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>IVEE Export to XLS</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      background: #f4f4f4;
-    }
-    button {
-      padding: 12px 20px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    #debug {
-      margin-top: 20px;
-      padding: 10px;
-      background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      width: 80%;
-      max-height: 200px;
-      overflow-y: auto;
-      font-size: 14px;
-      color: #333;
-      white-space: pre-line;
-    }
-  </style>
-</head>
-<body>
-  <button id="downloadBtn">Download XLS</button>
-
-  <!-- Debug output -->
-  <p id="debug">Debug messages will appear here...</p>
-
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-
-    // ✅ Firebase config
-    const firebaseConfig = {
-      apiKey: "AIzaSyBckBp4RW0kWY6WMHJZ-ML0hCT18jTxLuk",
-      authDomain: "ivee-a3512.firebaseapp.com",
-      projectId: "ivee-a3512",
-      storageBucket: "ivee-a3512.appspot.com",
-      messagingSenderId: "843533343549",
-      appId: "1:843533343549:web:945fe63f0cdb5c8638c354",
-      measurementId: "G-2PE3N7SQLK"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-    function logDebug(message) {
-      const debugEl = document.getElementById("debug");
-      debugEl.innerText += "\n" + message;
-      debugEl.scrollTop = debugEl.scrollHeight;
-    }
-
-    async function exportToExcel() {
-      try {
-        logDebug("Fetching data from Firestore...");
-
-        const studentsSnap = await getDocs(collection(db, "students"));
-        const attendanceSnap = await getDocs(collection(db, "attendanceLog"));
-        const collectionSnap = await getDocs(collection(db, "collectionLog"));
-        const documentSnap = await getDocs(collection(db, "documentLog"));
-
-        logDebug(`Loaded ${studentsSnap.size} students`);
-        logDebug(`Loaded ${attendanceSnap.size} attendance logs`);
-        logDebug(`Loaded ${collectionSnap.size} collection logs`);
-        logDebug(`Loaded ${documentSnap.size} document logs`);
-
-        let attendanceEvents = [...new Set(attendanceSnap.docs.map(d => d.data().eventName))];
-        let collectionPurposes = [...new Set(collectionSnap.docs.map(d => d.data().purpose))];
-        let documentTypes = [...new Set(documentSnap.docs.map(d => d.data().documentType))];
-
-        logDebug("Headers: " + [...attendanceEvents, ...collectionPurposes, ...documentTypes].join(", "));
-
-        let headers = ["Name", "ID", ...attendanceEvents, ...collectionPurposes, ...documentTypes];
-        let rows = [headers];
-
-        for (let studentDoc of studentsSnap.docs) {
-          let student = studentDoc.data();
-          let row = [student.studentName, student.idNumber];
-
-          // Attendance ✔
-          for (let event of attendanceEvents) {
-            let hasAttendance = attendanceSnap.docs.some(
-              d => d.data().studentID === student.idNumber && d.data().eventName === event
-            );
-            row.push(hasAttendance ? "✔" : "");
-          }
-
-          // Collections (amount)
-          for (let purpose of collectionPurposes) {
-            let collectionEntry = collectionSnap.docs.find(
-              d => d.data().studentID === student.idNumber && d.data().purpose === purpose
-            );
-            row.push(collectionEntry ? (collectionEntry.data().amount || "1") : "");
-          }
-
-          // Documents ✔
-          for (let docType of documentTypes) {
-            let hasDoc = documentSnap.docs.some(
-              d => d.data().studentID === student.idNumber && d.data().documentType === docType
-            );
-            row.push(hasDoc ? "✔" : "");
-          }
-
-          rows.push(row);
+    <meta charset="UTF-8">
+    <title>IVEE Export to XLS</title>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f4f4f4;
         }
 
-        logDebug("Rows ready: " + (rows.length - 1) + " students");
+        .header {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 10px;
+        }
 
-        // Convert to sheet
-        let worksheet = XLSX.utils.aoa_to_sheet(rows);
-        let workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Student Logs");
+        #searchInput {
+            padding: 8px;
+            width: 250px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
 
-        // Download
-        XLSX.writeFile(workbook, "student_logs.xls");
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            background: white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
 
-        logDebug("Excel file generated successfully ✅");
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+            font-size: 14px;
+        }
 
-      } catch (error) {
-        logDebug("❌ Error: " + error.message);
-        console.error(error);
-      }
-    }
+        /* Name column left-aligned */
+        td:first-child, th:first-child {
+            text-align: left;
+        }
 
-    // ✅ Attach event listener instead of onclick
-    document.getElementById("downloadBtn").addEventListener("click", exportToExcel);
-  </script>
+        th {
+            background: #007bff;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        #downloadBtn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #downloadBtn:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <input type="text" id="searchInput" placeholder="Search by Name or ID...">
+    </div>
+
+    <table id="studentTable">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+
+    <button id="downloadBtn">Download XLS</button>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+        // ✅ Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBckBp4RW0kWY6WMHJZ-ML0hCT18jTxLuk",
+            authDomain: "ivee-a3512.firebaseapp.com",
+            projectId: "ivee-a3512",
+            storageBucket: "ivee-a3512.appspot.com",
+            messagingSenderId: "843533343549",
+            appId: "1:843533343549:web:945fe63f0cdb5c8638c354",
+            measurementId: "G-2PE3N7SQLK"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let rows = [];
+        let headers = [];
+
+        async function fetchData() {
+            const studentsSnap = await getDocs(collection(db, "students"));
+            const attendanceSnap = await getDocs(collection(db, "attendanceLog"));
+
+            // ✅ Unique events for headers
+            let attendanceEvents = [...new Set(attendanceSnap.docs.map(d => d.data().eventName))].sort();
+
+            headers = ["Name", "ID", "Department", "Program", "Year Level", ...attendanceEvents];
+            rows = [headers];
+
+            let students = studentsSnap.docs.map(doc => doc.data());
+
+            // ✅ Sort by Department → Program → Year Level → Name
+            students.sort((a, b) => {
+                const deptA = a.department || "ZZZ";
+                const deptB = b.department || "ZZZ";
+                if (deptA !== deptB) return deptA.localeCompare(deptB);
+
+                const programA = a.program || "ZZZ";
+                const programB = b.program || "ZZZ";
+                if (programA !== programB) return programA.localeCompare(programB);
+
+                const yearA = a.yearLevel || "ZZZ";
+                const yearB = b.yearLevel || "ZZZ";
+                if (yearA !== yearB) return yearA.localeCompare(yearB);
+
+                return (a.studentName || "").localeCompare(b.studentName || "");
+            });
+
+            for (let student of students) {
+                let row = [
+                    student.studentName || "",
+                    student.idNumber || "",
+                    student.department || "",
+                    student.program || "",
+                    student.yearLevel || ""
+                ];
+
+                for (let event of attendanceEvents) {
+                    let hasAttendance = attendanceSnap.docs.some(
+                        d => d.data().studentID === student.idNumber && d.data().eventName === event
+                    );
+                    row.push(hasAttendance ? "✔" : "");
+                }
+
+                rows.push(row);
+            }
+
+            renderTable(rows);
+        }
+
+        function renderTable(data) {
+            let thead = document.getElementById("tableHead");
+            let tbody = document.getElementById("tableBody");
+
+            thead.innerHTML = "";
+            tbody.innerHTML = "";
+
+            // Render headers
+            let headRow = document.createElement("tr");
+            headers.forEach(h => {
+                let th = document.createElement("th");
+                th.textContent = h;
+                headRow.appendChild(th);
+            });
+            thead.appendChild(headRow);
+
+            // Render rows
+            for (let i = 1; i < data.length; i++) {
+                let tr = document.createElement("tr");
+                data[i].forEach(cell => {
+                    let td = document.createElement("td");
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            }
+        }
+
+        function exportToExcel() {
+            let worksheet = XLSX.utils.aoa_to_sheet(rows);
+            let workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Student Logs");
+            XLSX.writeFile(workbook, "student_logs.xls");
+        }
+
+        // ✅ Search filter
+        document.getElementById("searchInput").addEventListener("keyup", function () {
+            let filter = this.value.toLowerCase();
+            let filteredRows = [headers, ...rows.slice(1).filter(r =>
+                r[0].toLowerCase().includes(filter) || r[1].toLowerCase().includes(filter)
+            )];
+            renderTable(filteredRows);
+        });
+
+        document.getElementById("downloadBtn").addEventListener("click", exportToExcel);
+
+        fetchData();
+    </script>
 </body>
 </html>
